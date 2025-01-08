@@ -2,6 +2,9 @@ import unittest
 from unittest.mock import patch, mock_open
 from io import StringIO
 from ipaddress import ip_address
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 from core.ip_extractor import IPExtractor
 
 class TestIPExtractor(unittest.TestCase):

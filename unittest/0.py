@@ -1,38 +1,69 @@
 import unittest
-from unittest.mock import patch, MagicMock
-from your_module import my_function
+from unittest.mock import patch
+import sys
+import os
+from typing import Set, Tuple
 
-class TestMyFunction(unittest.TestCase):
+# Добавил путь к src
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-    @patch('tkinter.filedialog.askopenfilenames')
-    @patch('tkinter.filedialog.asksaveasfilename')
-    @patch('tkinter.Text')
-    @patch('tkinter.Button')
-    @patch('tkinter.Tk')
-    def test_my_function(self, mock_tk, mock_button, mock_text, mock_asksaveasfilename, mock_askopenfilenames):
-        # Создаем мок-экземпляры для Tkinter-компонентов
-        mock_tk_instance = MagicMock()
-        mock_button_instance = MagicMock()
-        mock_text_instance = MagicMock()
+from core.ip_extractor import IPExtractor
 
-        # Устанавливаем возвращаемые значения для диалоговых окон и компонентов Tkinter
-        mock_asksaveasfilename.return_value = 'test.txt'
-        mock_askopenfilenames.return_value = ['test1.txt', 'test2.txt']
-        mock_tk.return_value = mock_tk_instance
-        mock_button.return_value = mock_button_instance
-        mock_text.return_value = mock_text_instance
+class TestIPExtractor(unittest.TestCase):
+    def test_process_single_ip(self):
+        ip_addresses = set()
+        IPExtractor.process_single_ip("192.168.0.0/30", ip_addresses)
+        expected_ips = {"192.168.0.1", "192.168.0.2"}  # Хосты в сети 192.168.0.0/30
+        self.assertEqual(ip_addresses, expected_ips)
 
-        # Вызов функцию, которую тестируете
-        my_function()
+    def test_process_ip_range(self):
+        ip_addresses = set()
+        IPExtractor.process_ip_range("192.168.0.1-192.168.0.3", ip_addresses)
+        expected_ips = {"192.168.0.1", "192.168.0.2", "192.168.0.3"}
+        self.assertEqual(ip_addresses, expected_ips)
 
-        # Проверки, чтобы убедиться, что мок-методы были вызваны как ожидалось
-        mock_askopenfilenames.assert_called_once()  # Проверяет, что диалог открытия файла был вызван
-        mock_asksaveasfilename.assert_called_once()  # Проверяет, что диалог сохранения файла был вызван
-        mock_tk_instance.mainloop.assert_called_once()  # Проверяет, что mainloop был вызван один раз
+    def test_process_line_with_ip(self):
+        ip_addresses = set()
+        IPExtractor.process_line("192.168.0.1", ip_addresses)
+        self.assertIn("192.168.0.1", ip_addresses)
 
-        # Дополнительные проверки
-        mock_button_instance.configure.assert_called_once_with(bg='lightblue', fg='black', font=('Helvetica', 12))  # Проверка на конфигурацию кнопки
-        mock_text_instance.insert.assert_called()  # Проверяет, что метод insert был вызван на mock_text_instance
+    def test_process_line_with_ip_range(self):
+        ip_addresses = set()
+        IPExtractor.process_line("192.168.0.1-192.168.0.3", ip_addresses)
+        expected_ips = {"192.168.0.1", "192.168.0.2", "192.168.0.3"}
+        self.assertEqual(ip_addresses, expected_ips)
 
-if __name__ == '__main__':
+    def test_process_file(self):
+        test_file_content = """192.168.0.1
+192.168.0.2-192.168.0.3"""
+        test_file_path = "test_ips.txt"
+
+        with open(test_file_path, "w") as f:
+            f.write(test_file_content)
+
+        ip_addresses = set()
+        IPExtractor.process_file(test_file_path, ip_addresses)
+
+        expected_ips = {"192.168.0.1", "192.168.0.2", "192.168.0.3"}
+        self.assertEqual(ip_addresses, expected_ips)
+
+        os.remove(test_file_path)
+
+    def test_categorize_ip(self):
+        ip_addresses = {"192.168.0.1", "8.8.8.8"}
+        global_ips, local_ips = IPExtractor.categorize_ip(ip_addresses)
+        self.assertEqual(global_ips, {"8.8.8.8"})
+        self.assertEqual(local_ips, {"192.168.0.1"})
+
+    @patch("core.ip_extractor.IPExtractor.process_file_in_thread")
+    def test_extract_ips(self, mock_process_file_in_thread):
+        mock_process_file_in_thread.side_effect = lambda file_path, ip_addresses: ip_addresses.update({"192.168.0.1", "8.8.8.8"})
+
+        global_ips, local_ips = IPExtractor.extract_ips("dummy_path")
+
+        self.assertEqual(global_ips, {"8.8.8.8"})
+        self.assertEqual(local_ips, {"192.168.0.1"})
+        mock_process_file_in_thread.assert_called_once()
+
+if __name__ == "__main__":
     unittest.main()
